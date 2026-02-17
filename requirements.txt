@@ -5,3 +5,6 @@ flask
 requests
 beautifulsoup4
 html5lib
+cryptography
+pytz
+lxml
