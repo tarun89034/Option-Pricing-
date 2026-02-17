@@ -5,7 +5,7 @@ Run this to test the application locally before deploying to Vercel.
 Uses Flask to serve the frontend and API endpoints.
 
 Usage:
-    pip install flask flask-cors yfinance numpy scipy pandas
+    pip install flask flask-cors yfinance numpy pandas
     python server.py
 
 Then open http://localhost:5000

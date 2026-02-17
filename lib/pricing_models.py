@@ -6,7 +6,31 @@ for European, American, Asian, Lookback, and Barrier options.
 """
 
 import numpy as np
-from scipy.stats import norm
+
+def norm_pdf(x):
+    """Standard normal probability density function."""
+    return (1.0 / np.sqrt(2 * np.pi)) * np.exp(-0.5 * x**2)
+
+def norm_cdf(x):
+    """
+    Standard normal cumulative distribution function.
+    Uses Hasting's approximation (precision ~1e-7).
+    """
+    a1 = 0.319381530
+    a2 = -0.356563782
+    a3 = 1.781477937
+    a4 = -1.821255978
+    a5 = 1.330274429
+    p = 0.2316419
+    
+    # Handle negative values
+    is_negative = x < 0
+    x = np.abs(x)
+    
+    t = 1.0 / (1.0 + p * x)
+    y = 1.0 - norm_pdf(x) * (a1*t + a2*t**2 + a3*t**3 + a4*t**4 + a5*t**5)
+    
+    return 1.0 - y if is_negative else y
 
 
 class BlackScholesModel:
@@ -40,39 +64,39 @@ class BlackScholesModel:
         self.d2 = self.d1 - self.sigma * sqrt_T
 
     def call_price(self):
-        return self.S * np.exp(-self.q * self.T) * norm.cdf(
+        return self.S * np.exp(-self.q * self.T) * norm_cdf(
             self.d1
-        ) - self.K * np.exp(-self.r * self.T) * norm.cdf(self.d2)
+        ) - self.K * np.exp(-self.r * self.T) * norm_cdf(self.d2)
 
     def put_price(self):
-        return self.K * np.exp(-self.r * self.T) * norm.cdf(
+        return self.K * np.exp(-self.r * self.T) * norm_cdf(
             -self.d2
-        ) - self.S * np.exp(-self.q * self.T) * norm.cdf(-self.d1)
+        ) - self.S * np.exp(-self.q * self.T) * norm_cdf(-self.d1)
 
     def price(self, option_type="call"):
         return self.call_price() if option_type.lower() == "call" else self.put_price()
 
     def delta(self, option_type="call"):
         if option_type.lower() == "call":
-            return float(np.exp(-self.q * self.T) * norm.cdf(self.d1))
-        return float(np.exp(-self.q * self.T) * (norm.cdf(self.d1) - 1))
+            return float(np.exp(-self.q * self.T) * norm_cdf(self.d1))
+        return float(np.exp(-self.q * self.T) * (norm_cdf(self.d1) - 1))
 
     def gamma(self):
         return float(
-            (np.exp(-self.q * self.T) * norm.pdf(self.d1))
+            (np.exp(-self.q * self.T) * norm_pdf(self.d1))
             / (self.S * self.sigma * np.sqrt(self.T))
         )
 
     def theta(self, option_type="call"):
         term1 = -(
-            self.S * self.sigma * np.exp(-self.q * self.T) * norm.pdf(self.d1)
+            self.S * self.sigma * np.exp(-self.q * self.T) * norm_pdf(self.d1)
         ) / (2 * np.sqrt(self.T))
         if option_type.lower() == "call":
-            term2 = self.q * self.S * np.exp(-self.q * self.T) * norm.cdf(self.d1)
-            term3 = -self.r * self.K * np.exp(-self.r * self.T) * norm.cdf(self.d2)
+            term2 = self.q * self.S * np.exp(-self.q * self.T) * norm_cdf(self.d1)
+            term3 = -self.r * self.K * np.exp(-self.r * self.T) * norm_cdf(self.d2)
         else:
-            term2 = -self.q * self.S * np.exp(-self.q * self.T) * norm.cdf(-self.d1)
-            term3 = self.r * self.K * np.exp(-self.r * self.T) * norm.cdf(-self.d2)
+            term2 = -self.q * self.S * np.exp(-self.q * self.T) * norm_cdf(-self.d1)
+            term3 = self.r * self.K * np.exp(-self.r * self.T) * norm_cdf(-self.d2)
         return float((term1 + term2 + term3) / 365)
 
     def vega(self):
@@ -80,17 +104,17 @@ class BlackScholesModel:
             self.S
             * np.exp(-self.q * self.T)
             * np.sqrt(self.T)
-            * norm.pdf(self.d1)
+            * norm_pdf(self.d1)
             / 100
         )
 
     def rho(self, option_type="call"):
         if option_type.lower() == "call":
             return float(
-                self.K * self.T * np.exp(-self.r * self.T) * norm.cdf(self.d2) / 100
+                self.K * self.T * np.exp(-self.r * self.T) * norm_cdf(self.d2) / 100
             )
         return float(
-            -self.K * self.T * np.exp(-self.r * self.T) * norm.cdf(-self.d2) / 100
+            -self.K * self.T * np.exp(-self.r * self.T) * norm_cdf(-self.d2) / 100
         )
 
     def get_all_greeks(self, option_type="call"):
