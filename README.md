@@ -116,7 +116,7 @@ Option pricing/
 
 ```bash
 # Install dependencies
-pip install flask flask-cors yfinance numpy scipy pandas
+pip install flask flask-cors yfinance numpy pandas
 
 # Run the development server
 python server.py
