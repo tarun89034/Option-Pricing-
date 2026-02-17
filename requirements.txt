@@ -1,10 +1,7 @@
-yfinance
+flask
 numpy
 pandas
-flask
+yfinance
 requests
 beautifulsoup4
-html5lib
-cryptography
-pytz
-lxml
+
