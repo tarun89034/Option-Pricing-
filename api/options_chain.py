@@ -40,6 +40,8 @@ def handler(request):
         ticker = params.get("ticker", [None])[0]
         expiry = params.get("expiry", [None])[0]
 
+        only_expiries = params.get("only_expiries", ["false"])[0].lower() == "true"
+
         if not ticker:
             return {
                 "statusCode": 400,
@@ -57,6 +59,14 @@ def handler(request):
             }
 
         fetcher = MarketDataFetcher(ticker)
+
+        if only_expiries:
+            return {
+                "statusCode": 200,
+                "headers": CORS_HEADERS,
+                "body": json.dumps({"expiries": fetcher.get_options_expiries()}),
+            }
+
         chain_data = fetcher.get_options_chain(expiry=expiry)
         chain_data["ticker"] = ticker
         chain_data["spot_price"] = round(fetcher.spot_price, 2)

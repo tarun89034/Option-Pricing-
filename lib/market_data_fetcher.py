@@ -152,6 +152,20 @@ class MarketDataFetcher:
                 "error": str(e),
             }
 
+    def _safe_float(self, val, decimals=None):
+        """Safely convert value to float, handling NaN/Inf."""
+        try:
+            if val is None:
+                return None
+            f_val = float(val)
+            if np.isnan(f_val) or np.isinf(f_val):
+                return None
+            if decimals is not None:
+                return round(f_val, decimals)
+            return f_val
+        except (ValueError, TypeError):
+            return None
+
     def _chain_to_records(self, df):
         """Convert an options chain DataFrame to a list of dicts."""
         if df is None or df.empty:
@@ -159,13 +173,13 @@ class MarketDataFetcher:
         records = []
         for _, row in df.iterrows():
             record = {
-                "strike": round(float(row.get("strike", 0)), 2),
-                "lastPrice": round(float(row.get("lastPrice", 0)), 4),
-                "bid": round(float(row.get("bid", 0)), 4),
-                "ask": round(float(row.get("ask", 0)), 4),
+                "strike": self._safe_float(row.get("strike"), 2),
+                "lastPrice": self._safe_float(row.get("lastPrice"), 4),
+                "bid": self._safe_float(row.get("bid"), 4),
+                "ask": self._safe_float(row.get("ask"), 4),
                 "volume": int(row.get("volume", 0)) if pd.notna(row.get("volume")) else 0,
                 "openInterest": int(row.get("openInterest", 0)) if pd.notna(row.get("openInterest")) else 0,
-                "impliedVolatility": round(float(row.get("impliedVolatility", 0)), 4),
+                "impliedVolatility": self._safe_float(row.get("impliedVolatility"), 4),
                 "inTheMoney": bool(row.get("inTheMoney", False)),
             }
             records.append(record)

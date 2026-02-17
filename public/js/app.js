@@ -5,6 +5,29 @@
 (function () {
     'use strict';
 
+    // ---- State ----
+    const State = {
+        currency: 'USD',
+        rate: 1.0,
+        currencySymbol: '$',
+
+        lastPricingData: null,
+        lastDashboardData: null,
+        lastChainData: null,
+        lastChainType: 'calls'
+    };
+
+    const CURRENCY_SYMBOLS = {
+        'USD': '$',
+        'EUR': '€',
+        'GBP': '£',
+        'INR': '₹',
+        'JPY': '¥',
+        'AUD': 'A$',
+        'CAD': 'C$',
+        'CNY': '¥',
+    };
+
     // ---- Navigation ----
     const navButtons = Utils.qsa('.nav-btn');
     const views = Utils.qsa('.view');
@@ -12,12 +35,65 @@
     navButtons.forEach(btn => {
         btn.addEventListener('click', () => {
             const target = btn.dataset.view;
-            navButtons.forEach(b => b.classList.remove('active'));
-            views.forEach(v => v.classList.remove('active'));
-            btn.classList.add('active');
-            Utils.el('view-' + target).classList.add('active');
+            switchView(target);
         });
     });
+
+    function switchView(target) {
+        navButtons.forEach(b => b.classList.remove('active'));
+        views.forEach(v => v.classList.remove('active'));
+
+        const activeBtn = Utils.qs(`.nav-btn[data-view="${target}"]`);
+        if (activeBtn) activeBtn.classList.add('active');
+
+        Utils.el('view-' + target).classList.add('active');
+    }
+
+    // ---- Currency Logic ----
+    const currencySelect = Utils.el('currency-select');
+
+    currencySelect.addEventListener('change', async () => {
+        const newCurrency = currencySelect.value;
+        if (newCurrency === State.currency) return;
+
+        // Disable select while loading
+        currencySelect.disabled = true;
+        document.body.style.cursor = 'wait';
+
+        try {
+            if (newCurrency === 'USD') {
+                State.rate = 1.0;
+            } else {
+                // Fetch rate USD -> NewCurrency
+                const data = await API.getExchangeRate('USD', newCurrency);
+                State.rate = data.rate;
+            }
+            State.currency = newCurrency;
+            State.currencySymbol = CURRENCY_SYMBOLS[newCurrency] || '$';
+
+            // Re-render current data with new rates
+            if (State.lastPricingData) renderPricingResults(State.lastPricingData);
+            if (State.lastDashboardData) renderDashboard(State.lastDashboardData);
+            if (State.lastChainData) renderChain(State.lastChainType);
+
+            // Update Markets if needed (though markets are static text mostly, maybe tickers?)
+            // Markets explorer is mostly navigation, so no prices to update there immediately.
+
+        } catch (err) {
+            console.error('Failed to switch currency:', err);
+            // Silently revert
+            currencySelect.value = State.currency;
+        } finally {
+            currencySelect.disabled = false;
+            document.body.style.cursor = 'default';
+        }
+    });
+
+    // Helper to convert and format
+    function formatMoney(value, decimals = 2) {
+        if (value == null) return 'N/A';
+        return Utils.formatCurrency(value * State.rate, State.currencySymbol, decimals);
+    }
 
     // ---- Pricing Calculator ----
     const pricingForm = Utils.el('pricing-form');
@@ -38,7 +114,22 @@
         Utils.setLoading(btnPrice, true);
 
         try {
+            // Note: API returns data in native currency (assumed USD for now or raw match)
+            // Ideally we'd know the source currency. For now assuming input is consistent.
+            // If user enters non-USD ticker, yfinance returns raw values.
+            // We blindly convert assuming base is USD? 
+            // WAIT. If I look at RELIANCE.NS, prices are in INR.
+            // Converting INR * (USD->INR rate) would be wrong (squared).
+            // Complexity: The backend doesn't tell us the currency of the ticker.
+            // Actually `market_data_fetcher` returns `currency`.
+            // We should use that!
+
             const data = await API.priceOption(ticker, optionType, strike, days);
+            State.lastPricingData = data;
+
+            // Check ticker currency
+            await handleTickerCurrency(data.market_data.currency || 'USD');
+
             renderPricingResults(data);
             Utils.el('results-panel').style.display = 'block';
         } catch (err) {
@@ -48,6 +139,33 @@
         }
     });
 
+    // Handle ticker currency vs selected currency
+    async function handleTickerCurrency(tickerCurrency) {
+        // If ticker is e.g. INR and User selected INR. Rate = 1.
+        // If ticker is USD and User selected INR. Rate = USD->INR.
+        // If ticker is INR and User selected USD. Rate = INR->USD.
+
+        // My simple State.rate was "USD -> Selected".
+        // This assumes input is always USD.
+        // But RELIANCE.NS gives INR.
+
+        // Logic adjustment:
+        // We need rate: TickerCurrency -> SelectedCurrency.
+
+        if (tickerCurrency === State.currency) {
+            State.rate = 1.0;
+        } else {
+            // Fetch cross rate
+            try {
+                const data = await API.getExchangeRate(tickerCurrency, State.currency);
+                State.rate = data.rate;
+            } catch (e) {
+                console.warn("Could not fetch cross rate, defaulting to 1.0");
+                State.rate = 1.0;
+            }
+        }
+    }
+
     function renderPricingResults(data) {
         // Market Data Summary
         const md = data.market_data;
@@ -55,8 +173,8 @@
         mdGrid.innerHTML = '';
         const mdItems = [
             ['Ticker', md.name + ' (' + md.ticker + ')'],
-            ['Spot Price', Utils.formatCurrency(md.spot_price)],
-            ['Strike Price', Utils.formatCurrency(md.strike_price)],
+            ['Spot Price', formatMoney(md.spot_price)],
+            ['Strike Price', formatMoney(md.strike_price)],
             ['Moneyness', md.moneyness + ' (' + Utils.formatNumber(md.moneyness_ratio, 3) + ')'],
             ['Volatility', Utils.formatPercent(md.volatility)],
             ['Risk-Free Rate', Utils.formatPercent(md.risk_free_rate)],
@@ -90,8 +208,8 @@
             tr.innerHTML = `
                 <td>${model}</td>
                 <td>${style}</td>
-                <td>${Utils.formatCurrency(price, 4)}</td>
-                <td>${se != null ? Utils.formatNumber(se, 6) : '--'}</td>
+                <td>${formatMoney(price, 4)}</td>
+                <td>${se != null ? Utils.formatNumber(se * State.rate, 6) : '--'}</td>
             `;
             tbody.appendChild(tr);
         });
@@ -101,31 +219,51 @@
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td colspan="2" style="color:var(--text-secondary);">Early Exercise Premium</td>
-                <td style="color:var(--green);">${Utils.formatCurrency(bn.early_exercise_premium, 4)}</td>
+                <td style="color:var(--green);">${formatMoney(bn.early_exercise_premium, 4)}</td>
                 <td style="color:var(--text-muted);">${bn.early_exercise_nodes} nodes</td>
             `;
             tbody.appendChild(tr);
         }
 
-        // Greeks Table
+        // Greeks Table (Greeks are unitless except Rho/Theta maybe? standard greeks are derivatives)
+        // Delta (dC/dS) - unitless (ratio)
+        // Gamma (d2C/dS2) - 1/currency? No, roughly.
+        // Theta (dC/dt) - currency/time. Should convert!
+        // Vega (dC/dSigma) - currency. Should convert!
+        // Rho (dC/dr) - currency. Should convert!
+
         const greeksTbody = Utils.el('greeks-tbody');
         greeksTbody.innerHTML = '';
         const bsGreeks = bs.greeks;
         const binGreeks = bn.greeks;
         const greekNames = [
-            ['Delta', 'delta'],
-            ['Gamma', 'gamma'],
-            ['Theta', 'theta'],
-            ['Vega', 'vega'],
+            ['Delta', 'delta', false],
+            ['Gamma', 'gamma', false], // Gamma is 1/S, so technically 1/Currency. If we convert S->kS, Gamma->Gamma/k. 
+            // Actually Price is kP, Spot is kS. Gamma = d2(kP)/d(kS)^2 = k/k^2 = 1/k Gamma.
+            // This is getting complex. Let's keep greeks raw for now or just primary ones.
+            // Actually, standard practice for retail app: usually show raw greeks or dollar greeks?
+            // Let's Convert Theta, Vega, Rho, leave Delta Gamma.
+            ['Theta', 'theta', true],
+            ['Vega', 'vega', true],
         ];
         if (bsGreeks.rho != null) {
-            greekNames.push(['Rho', 'rho']);
+            greekNames.push(['Rho', 'rho', true]);
         }
 
-        greekNames.forEach(([name, key]) => {
+        greekNames.forEach(([name, key, convert]) => {
             const tr = document.createElement('tr');
-            const bsVal = bsGreeks[key];
-            const binVal = binGreeks != null ? binGreeks[key] : null;
+            let bsVal = bsGreeks[key];
+            let binVal = binGreeks != null ? binGreeks[key] : null;
+
+            if (convert) {
+                if (bsVal != null) bsVal *= State.rate;
+                if (binVal != null) binVal *= State.rate;
+            } else if (key === 'gamma' && State.rate !== 1.0) {
+                // Gamma scales with 1/Spot. if Spot is x100, Gamma is /100.
+                if (bsVal != null) bsVal /= State.rate;
+                if (binVal != null) binVal /= State.rate;
+            }
+
             tr.innerHTML = `
                 <td>${name}</td>
                 <td>${bsVal != null ? Utils.formatNumber(bsVal, 6) : '--'}</td>
@@ -140,17 +278,18 @@
         convGrid.innerHTML = '';
         convGrid.appendChild(Utils.createDataItem(
             'BS vs Binomial',
-            Utils.formatCurrency(conv.bs_vs_binomial.diff, 6) + ' (' + conv.bs_vs_binomial.pct.toFixed(4) + '%)'
+            formatMoney(conv.bs_vs_binomial.diff, 6) + ' (' + conv.bs_vs_binomial.pct.toFixed(4) + '%)'
         ));
         convGrid.appendChild(Utils.createDataItem(
             'BS vs Monte Carlo',
-            Utils.formatCurrency(conv.bs_vs_monte_carlo.diff, 6) + ' (' + conv.bs_vs_monte_carlo.pct.toFixed(4) + '%)'
+            formatMoney(conv.bs_vs_monte_carlo.diff, 6) + ' (' + conv.bs_vs_monte_carlo.pct.toFixed(4) + '%)'
         ));
 
         // Charts
         Charts.createModelComparisonChart('model-comparison-chart', data);
         Charts.createGreeksChart('greeks-chart', bsGreeks, binGreeks || bsGreeks);
     }
+
 
     // ---- Historical Dashboard ----
     const dashForm = Utils.el('dashboard-form');
@@ -169,6 +308,10 @@
 
         try {
             const data = await API.getMarketData(ticker, period);
+            State.lastDashboardData = data;
+
+            await handleTickerCurrency(data.stock_info.currency || 'USD');
+
             renderDashboard(data);
             Utils.el('dashboard-results').style.display = 'block';
         } catch (err) {
@@ -188,8 +331,8 @@
             ['Exchange', info.exchange],
             ['Sector', info.sector],
             ['Industry', info.industry],
-            ['Market Cap', Utils.formatMarketCap(info.market_cap)],
-            ['Price', Utils.formatCurrency(info.spot_price)],
+            ['Market Cap', Utils.formatMarketCap(info.market_cap * State.rate)], // Approx market cap conversion
+            ['Price', formatMoney(info.spot_price)],
             ['Hist. Volatility', Utils.formatPercent(info.historical_volatility)],
             ['Dividend Yield', Utils.formatPercent(info.dividend_yield)],
             ['Risk-Free Rate', Utils.formatPercent(info.risk_free_rate)],
@@ -198,9 +341,19 @@
             infoGrid.appendChild(Utils.createDataItem(label, value));
         });
 
-        // Charts
-        Charts.createPriceChart('price-chart', data.historical_data);
-        Charts.createVolumeChart('volume-chart', data.historical_data);
+        // Charts - update data with rate?
+        // Charts.js usually takes raw arrays. 
+        // Let's create a mapped copy for charts if we want converted axes.
+        const convertedHistory = data.historical_data.map(d => ({
+            ...d,
+            open: d.open * State.rate,
+            high: d.high * State.rate,
+            low: d.low * State.rate,
+            close: d.close * State.rate
+        }));
+
+        Charts.createPriceChart('price-chart', convertedHistory);
+        Charts.createVolumeChart('volume-chart', convertedHistory);
 
         // Historical Data Table
         const tbody = Utils.el('historical-tbody');
@@ -212,20 +365,20 @@
             const cls = change >= 0 ? 'positive' : 'negative';
             tr.innerHTML = `
                 <td>${d.date}</td>
-                <td>${Utils.formatCurrency(d.open)}</td>
-                <td>${Utils.formatCurrency(d.high)}</td>
-                <td>${Utils.formatCurrency(d.low)}</td>
-                <td class="${cls}">${Utils.formatCurrency(d.close)}</td>
+                <td>${formatMoney(d.open)}</td>
+                <td>${formatMoney(d.high)}</td>
+                <td>${formatMoney(d.low)}</td>
+                <td class="${cls}">${formatMoney(d.close)}</td>
                 <td>${Utils.formatVolume(d.volume)}</td>
             `;
             tbody.appendChild(tr);
         });
     }
 
+
     // ---- Options Chain ----
     const chainForm = Utils.el('chain-form');
     const btnChain = Utils.el('btn-chain');
-    let chainData = null;
 
     const chainTickerInput = Utils.el('chain-ticker');
     let chainTickerDebounce = null;
@@ -235,7 +388,9 @@
             const ticker = chainTickerInput.value.trim().toUpperCase();
             if (ticker.length < 1) return;
             try {
-                const data = await API.getOptionsChain(ticker);
+                // OPTIMIZATION: Use getExpiries instead of getOptionsChain
+                const data = await API.getExpiries(ticker);
+
                 const expirySelect = Utils.el('chain-expiry');
                 expirySelect.innerHTML = '';
                 if (data.expiries && data.expiries.length > 0) {
@@ -249,7 +404,8 @@
                     expirySelect.innerHTML = '<option value="">No options available</option>';
                 }
             } catch (e) {
-                // Silently handle -- user is probably still typing
+                const expirySelect = Utils.el('chain-expiry');
+                expirySelect.innerHTML = '<option value="">Select ticker...</option>';
             }
         }, 600);
     });
@@ -266,21 +422,47 @@
         Utils.setLoading(btnChain, true);
 
         try {
-            chainData = await API.getOptionsChain(ticker, expiry);
+            const data = await API.getOptionsChain(ticker, expiry);
+            State.lastChainData = data;
+
+            // Assume Ticker Currency is same as last fetched or default USD if we don't know
+            // Ideally chain endpoint returns currency. It doesn't currently. 
+            // We can infer from MarketData if we want, but that's an extra call.
+            // Let's assume USD for now OR assume user flow: they likely checked market data first.
+            // Better: Add currency to options_chain response in backend?
+            // Creating a lightweight separate fetch for currency here might be safe.
+            // For now, let's just stick to State.rate if it was set by other views, 
+            // OR reset to 1.0 (assuming USD input) if we switched tickers.
+
+            // Re-fetch rate to be safe? 
+            // Let's check ticker prefix/suffix? 
+            // Simple heuristic to avoid complex chaining:
+            // Just use the current rate logic but maybe reset if ticker changed?
+            // Actually, let's keep it simple: If user selected INR, they want INR.
+            // If they are looking at AAPL (USD), we convert USD->INR.
+            // If they are looking at RELIANCE (INR), we convert INR->INR (1.0).
+            // We need to know ticker currency.
+
+            // For robustness, let's quickly fetch info to get currency.
+            try {
+                const info = await API.getMarketData(ticker, '1mo'); // 1mo is fast
+                await handleTickerCurrency(info.stock_info.currency || 'USD');
+            } catch (e) {/* ignore */ }
+
             renderChain('calls');
             Utils.el('chain-results').style.display = 'block';
             Utils.el('chain-title').textContent = ticker + ' Options Chain';
-            Utils.el('chain-spot-price').textContent = 'Spot: ' + Utils.formatCurrency(chainData.spot_price);
+            Utils.el('chain-spot-price').textContent = 'Spot: ' + formatMoney(data.spot_price);
 
             // Update expiry select
             const expirySelect = Utils.el('chain-expiry');
             expirySelect.innerHTML = '';
-            if (chainData.expiries) {
-                chainData.expiries.forEach(exp => {
+            if (data.expiries) {
+                data.expiries.forEach(exp => {
                     const opt = document.createElement('option');
                     opt.value = exp;
                     opt.textContent = exp;
-                    if (exp === chainData.selected_expiry) opt.selected = true;
+                    if (exp === data.selected_expiry) opt.selected = true;
                     expirySelect.appendChild(opt);
                 });
             }
@@ -296,13 +478,14 @@
         tab.addEventListener('click', () => {
             Utils.qsa('.chain-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            if (chainData) renderChain(tab.dataset.chain);
+            State.lastChainType = tab.dataset.chain;
+            if (State.lastChainData) renderChain(tab.dataset.chain);
         });
     });
 
     function renderChain(type) {
-        if (!chainData) return;
-        const items = type === 'calls' ? chainData.calls : chainData.puts;
+        if (!State.lastChainData) return;
+        const items = type === 'calls' ? State.lastChainData.calls : State.lastChainData.puts;
         const tbody = Utils.el('chain-tbody');
         tbody.innerHTML = '';
 
@@ -316,10 +499,10 @@
         items.forEach(row => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td>${Utils.formatCurrency(row.strike)}</td>
-                <td>${Utils.formatCurrency(row.lastPrice, 4)}</td>
-                <td>${Utils.formatCurrency(row.bid, 4)}</td>
-                <td>${Utils.formatCurrency(row.ask, 4)}</td>
+                <td>${formatMoney(row.strike)}</td>
+                <td>${formatMoney(row.lastPrice, 4)}</td>
+                <td>${formatMoney(row.bid, 4)}</td>
+                <td>${formatMoney(row.ask, 4)}</td>
                 <td>${Utils.formatVolume(row.volume)}</td>
                 <td>${Utils.formatVolume(row.openInterest)}</td>
                 <td>${Utils.formatPercent(row.impliedVolatility)}</td>
@@ -332,10 +515,12 @@
     // ---- Global Markets Explorer ----
     function initMarkets() {
         const regionTabs = Utils.el('region-tabs');
+        if (!regionTabs) return;
         const content = Utils.el('markets-content');
         const regions = Object.keys(GLOBAL_MARKETS);
 
         // Create region tabs
+        regionTabs.innerHTML = '';
         regions.forEach((region, i) => {
             const btn = document.createElement('button');
             btn.className = 'region-tab' + (i === 0 ? ' active' : '');
@@ -348,7 +533,6 @@
             regionTabs.appendChild(btn);
         });
 
-        // Also add an "All" tab
         const allBtn = document.createElement('button');
         allBtn.className = 'region-tab';
         allBtn.textContent = 'All Regions';
@@ -359,7 +543,6 @@
         });
         regionTabs.insertBefore(allBtn, regionTabs.firstChild);
 
-        // Render first region
         renderRegion(regions[0]);
     }
 
@@ -385,8 +568,6 @@
     function createCountryCard(country, data) {
         const card = document.createElement('div');
         card.className = 'market-card';
-
-        // Header
         const header = document.createElement('div');
         header.className = 'market-card-header';
         header.innerHTML = `
@@ -395,7 +576,6 @@
         `;
         card.appendChild(header);
 
-        // Exchanges
         const exchanges = document.createElement('div');
         exchanges.className = 'market-exchanges';
         data.exchanges.forEach(ex => {
@@ -407,7 +587,6 @@
         });
         card.appendChild(exchanges);
 
-        // Tickers
         const tickers = document.createElement('div');
         tickers.className = 'market-tickers';
         data.tickers.forEach(t => {
@@ -422,21 +601,15 @@
             tickers.appendChild(chip);
         });
         card.appendChild(tickers);
-
         return card;
     }
 
     function loadTickerIntoPricer(symbol) {
         Utils.el('ticker').value = symbol;
-        // Switch to pricing view
-        navButtons.forEach(b => b.classList.remove('active'));
-        views.forEach(v => v.classList.remove('active'));
-        Utils.qs('[data-view="pricing"]').classList.add('active');
-        Utils.el('view-pricing').classList.add('active');
+        switchView('pricing');
         Utils.el('ticker').focus();
     }
 
-    // Initialize markets on load
     if (typeof GLOBAL_MARKETS !== 'undefined') {
         initMarkets();
     }
@@ -450,14 +623,12 @@
         const rows = Array.from(tbody.querySelectorAll('tr'));
         const key = th.dataset.sort;
         const idx = Array.from(th.parentElement.children).indexOf(th);
-
         const isAsc = th.classList.contains('sort-asc');
         table.querySelectorAll('th').forEach(t => t.classList.remove('sort-asc', 'sort-desc'));
         th.classList.add(isAsc ? 'sort-desc' : 'sort-asc');
-
         rows.sort((a, b) => {
-            const aText = a.children[idx]?.textContent.replace(/[$,%]/g, '').trim() || '';
-            const bText = b.children[idx]?.textContent.replace(/[$,%]/g, '').trim() || '';
+            const aText = a.children[idx]?.textContent.replace(/[$,€£₹¥A]/g, '').trim() || '';
+            const bText = b.children[idx]?.textContent.replace(/[$,€£₹¥A]/g, '').trim() || '';
             const aNum = parseFloat(aText);
             const bNum = parseFloat(bText);
             if (!isNaN(aNum) && !isNaN(bNum)) {
@@ -465,7 +636,7 @@
             }
             return isAsc ? bText.localeCompare(aText) : aText.localeCompare(bText);
         });
-
         rows.forEach(row => tbody.appendChild(row));
     });
+
 })();

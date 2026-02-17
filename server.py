@@ -47,6 +47,7 @@ def api_index():
             {"path": "/api/market_data", "method": "GET", "params": "ticker, period"},
             {"path": "/api/price_option", "method": "GET", "params": "ticker, option_type, strike, days_to_expiry"},
             {"path": "/api/options_chain", "method": "GET", "params": "ticker, expiry"},
+            {"path": "/api/exchange_rate", "method": "GET", "params": "source, target"},
         ],
     })
 
@@ -173,6 +174,7 @@ def price_option():
 def options_chain():
     ticker = request.args.get("ticker")
     expiry = request.args.get("expiry")
+    only_expiries = request.args.get("only_expiries", "false").lower() == "true"
 
     if not ticker:
         return jsonify({"error": "Missing required parameter: ticker"}), 400
@@ -184,10 +186,60 @@ def options_chain():
 
     try:
         fetcher = MarketDataFetcher(ticker)
+        
+        if only_expiries:
+             return jsonify({"expiries": fetcher.get_options_expiries()})
+
         chain = fetcher.get_options_chain(expiry=expiry)
         chain["ticker"] = ticker
         chain["spot_price"] = round(fetcher.spot_price, 2)
         return jsonify(chain)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/exchange_rate")
+def exchange_rate():
+    try:
+        source = request.args.get("source", "USD").upper()
+        target = request.args.get("target", "USD").upper()
+        
+        # Helper to get USD rate for a currency
+        def get_usd_rate(currency):
+             if currency == "USD": return 1.0
+             majors = ["EUR", "GBP", "AUD", "NZD"]
+             import yfinance as yf
+             if currency in majors:
+                 t = f"{currency}=X"
+                 h = yf.Ticker(t).history(period="1d")
+                 if not h.empty:
+                     return float(h["Close"].iloc[-1])
+             else:
+                 t = f"{currency}=X"
+                 h = yf.Ticker(t).history(period="1d")
+                 if not h.empty:
+                     val = float(h["Close"].iloc[-1])
+                     if val == 0: return 0
+                     return 1.0 / val
+             return None
+
+        if source == target:
+            rate = 1.0
+        else:
+            rate_s = get_usd_rate(source)
+            rate_t = get_usd_rate(target)
+            
+            if rate_s is None or rate_t is None:
+                 return jsonify({"error": "Could not determine exchange rate"}), 404
+            
+            rate = rate_s / rate_t
+
+        return jsonify({
+            "source": source,
+            "target": target,
+            "rate": rate,
+            "timestamp": "latest"
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

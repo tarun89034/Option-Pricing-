@@ -119,6 +119,37 @@ body {
     border-color: var(--border-active);
 }
 
+/* ---- Currency Selector ---- */
+.currency-selector {
+    margin-right: 1rem;
+}
+
+.currency-select {
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    padding: 0.4rem 0.5rem;
+    font-family: var(--font-sans);
+    font-size: 0.8rem;
+    font-weight: 500;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all var(--transition);
+    outline: none;
+}
+
+.currency-select:hover,
+.currency-select:focus {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: var(--accent-muted);
+}
+
+.currency-select option {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
 /* ---- Main Content ---- */
 .main-content {
     max-width: 1280px;

@@ -3,9 +3,9 @@
    ============================================================ */
 
 const Utils = {
-    formatCurrency(value, decimals = 2) {
+    formatCurrency(value, sentCurrency = '$', decimals = 2) {
         if (value == null || isNaN(value)) return 'N/A';
-        return '$' + Number(value).toFixed(decimals);
+        return sentCurrency + Number(value).toFixed(decimals);
     },
 
     formatPercent(value, decimals = 2) {
