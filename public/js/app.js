@@ -11,6 +11,8 @@
         rate: 1.0,
         currencySymbol: '$',
 
+        lastTickerCurrency: 'USD', // Track ticker currency
+
         lastPricingData: null,
         lastDashboardData: null,
         lastChainData: null,
@@ -61,23 +63,16 @@
         document.body.style.cursor = 'wait';
 
         try {
-            if (newCurrency === 'USD') {
-                State.rate = 1.0;
-            } else {
-                // Fetch rate USD -> NewCurrency
-                const data = await API.getExchangeRate('USD', newCurrency);
-                State.rate = data.rate;
-            }
             State.currency = newCurrency;
             State.currencySymbol = CURRENCY_SYMBOLS[newCurrency] || '$';
+
+            // Recalculate rate based on last known ticker currency
+            await handleTickerCurrency(State.lastTickerCurrency);
 
             // Re-render current data with new rates
             if (State.lastPricingData) renderPricingResults(State.lastPricingData);
             if (State.lastDashboardData) renderDashboard(State.lastDashboardData);
             if (State.lastChainData) renderChain(State.lastChainType);
-
-            // Update Markets if needed (though markets are static text mostly, maybe tickers?)
-            // Markets explorer is mostly navigation, so no prices to update there immediately.
 
         } catch (err) {
             console.error('Failed to switch currency:', err);
@@ -141,23 +136,14 @@
 
     // Handle ticker currency vs selected currency
     async function handleTickerCurrency(tickerCurrency) {
-        // If ticker is e.g. INR and User selected INR. Rate = 1.
-        // If ticker is USD and User selected INR. Rate = USD->INR.
-        // If ticker is INR and User selected USD. Rate = INR->USD.
+        State.lastTickerCurrency = tickerCurrency || 'USD';
 
-        // My simple State.rate was "USD -> Selected".
-        // This assumes input is always USD.
-        // But RELIANCE.NS gives INR.
-
-        // Logic adjustment:
-        // We need rate: TickerCurrency -> SelectedCurrency.
-
-        if (tickerCurrency === State.currency) {
+        if (State.lastTickerCurrency === State.currency) {
             State.rate = 1.0;
         } else {
             // Fetch cross rate
             try {
-                const data = await API.getExchangeRate(tickerCurrency, State.currency);
+                const data = await API.getExchangeRate(State.lastTickerCurrency, State.currency);
                 State.rate = data.rate;
             } catch (e) {
                 console.warn("Could not fetch cross rate, defaulting to 1.0");
@@ -173,6 +159,7 @@
         mdGrid.innerHTML = '';
         const mdItems = [
             ['Ticker', md.name + ' (' + md.ticker + ')'],
+            ['FX Rate', `${State.lastTickerCurrency} → ${State.currency} (${State.rate.toFixed(4)})`],
             ['Spot Price', formatMoney(md.spot_price)],
             ['Strike Price', formatMoney(md.strike_price)],
             ['Moneyness', md.moneyness + ' (' + Utils.formatNumber(md.moneyness_ratio, 3) + ')'],
