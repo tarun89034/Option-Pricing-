@@ -37,4 +37,12 @@ const API = {
     async getOptionsChain(ticker, expiry) {
         return this._fetch('/options_chain', { ticker, expiry: expiry || undefined });
     },
+
+    async getExpiries(ticker) {
+        return this._fetch('/options_chain', { ticker, only_expiries: 'true' });
+    },
+
+    async getExchangeRate(source, target) {
+        return this._fetch('/exchange_rate', { source, target });
+    },
 };

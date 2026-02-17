@@ -84,27 +84,73 @@ def price_option():
         if not ticker or not days_str:
             return jsonify({"error": "Missing parameters"}), 400
 
-        fetcher = MarketDataFetcher(ticker.strip().upper())
+        ticker = ticker.strip().upper()
+        days_to_expiry = int(days_str)
+        fetcher = MarketDataFetcher(ticker)
         S = fetcher.spot_price
         K = float(request.args.get("strike")) if request.args.get("strike") else S
-        T = int(days_str) / 365
+        T = days_to_expiry / 365
         option_type = request.args.get("option_type", "call").lower()
         r = fetcher.get_risk_free_rate()
         sigma = fetcher.historical_volatility
         q = fetcher.dividend_yield
 
+        # Moneyness
+        moneyness = S / K
+        if option_type == "call":
+            ms = "ITM" if moneyness > 1.02 else ("OTM" if moneyness < 0.98 else "ATM")
+        else:
+            ms = "ITM" if moneyness < 0.98 else ("OTM" if moneyness > 1.02 else "ATM")
+
+        market_data = {
+            "ticker": ticker,
+            "name": fetcher.get_stock_info().get("name", ticker),
+            "spot_price": round(S, 4),
+            "strike_price": round(K, 4),
+            "days_to_expiry": days_to_expiry,
+            "time_to_expiry_years": round(T, 6),
+            "risk_free_rate": round(r, 6),
+            "volatility": round(sigma, 6),
+            "dividend_yield": round(q, 6),
+            "option_type": option_type.upper(),
+            "moneyness": ms,
+            "moneyness_ratio": round(moneyness, 4),
+            "currency": fetcher.get_stock_info().get("currency", "USD"),
+        }
+
         bs = BlackScholesModel(S, K, T, r, sigma, q)
+        bs_results = bs.get_results(option_type)
 
         # Use reduced simulations/steps for serverless environment
         # to avoid timeout and memory issues
         mc = MonteCarloModel(S, K, T, r, sigma, q, n_simulations=10000, n_steps=50)
+        mc_results = mc.get_results(option_type)
+
         bn = BinomialModel(S, K, T, r, sigma, q, n_steps=50)
+        bn_results = bn.get_results(option_type)
+
+        # Convergence data expected by frontend
+        bs_price = bs_results["price"]
+        bin_eu = bn_results["european_price"]
+        mc_eu = mc_results["european"]["price"]
+
+        convergence = {
+            "bs_vs_binomial": {
+                "diff": round(abs(bs_price - bin_eu), 6),
+                "pct": round(abs(bs_price - bin_eu) / bs_price * 100, 4) if bs_price != 0 else 0,
+            },
+            "bs_vs_monte_carlo": {
+                "diff": round(abs(bs_price - mc_eu), 6),
+                "pct": round(abs(bs_price - mc_eu) / bs_price * 100, 4) if bs_price != 0 else 0,
+            },
+        }
 
         return jsonify({
-            "market_data": {"spot": S, "ticker": ticker.upper(), "currency": "USD"},
-            "black_scholes": bs.get_results(option_type),
-            "monte_carlo": mc.get_results(option_type),
-            "binomial": bn.get_results(option_type)
+            "market_data": market_data,
+            "black_scholes": bs_results,
+            "monte_carlo": mc_results,
+            "binomial": bn_results,
+            "convergence": convergence,
         })
     except Exception as e:
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
