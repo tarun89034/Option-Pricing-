@@ -2,24 +2,31 @@ import json
 import os
 import sys
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 
-# Add root to sys.path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add absolute root path to sys.path
+root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
 
 from lib.market_data_fetcher import MarketDataFetcher, validate_ticker
 from lib.pricing_models import BlackScholesModel, MonteCarloModel, BinomialModel
 
 app = Flask(__name__)
-# Enable CORS for all routes
-CORS(app)
+
+# Manual CORS handling to remove flask-cors dependency
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
 
 @app.route('/api/health', methods=['GET'])
 @app.route('/api/', methods=['GET'])
 def health():
     return jsonify({
         "status": "ok",
-        "service": "Option Pricing API (Flask Monolith)"
+        "service": "Option Pricing API (Flask Monolith Optimized)"
     })
 
 @app.route('/api/market_data', methods=['GET'])

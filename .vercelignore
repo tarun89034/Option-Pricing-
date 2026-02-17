@@ -1,0 +1,10 @@
+.git
+.gemini
+Untitled.ipynb
+server.py
+BRAIN
+brain
+node_modules
+__pycache__
+*.pyc
+.ipynb_checkpoints
