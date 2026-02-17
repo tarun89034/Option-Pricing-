@@ -38,7 +38,9 @@
     --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -135,8 +137,15 @@ body {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* ---- Panels ---- */
@@ -290,7 +299,9 @@ body {
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* ---- Data Grid (key-value pairs) ---- */
@@ -321,8 +332,13 @@ body {
     color: var(--text-heading);
 }
 
-.data-value.positive { color: var(--green); }
-.data-value.negative { color: var(--red); }
+.data-value.positive {
+    color: var(--green);
+}
+
+.data-value.negative {
+    color: var(--red);
+}
 
 /* ---- Tables ---- */
 .table-container {
@@ -466,6 +482,153 @@ body {
     background: var(--accent);
     border-color: var(--accent);
     color: #fff;
+}
+
+/* ---- Global Markets Explorer ---- */
+.markets-intro {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+    line-height: 1.5;
+}
+
+.markets-region-tabs {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
+
+.region-tab {
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    padding: 0.4rem 0.85rem;
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.region-tab:hover {
+    background: var(--accent-muted);
+    color: var(--text-primary);
+}
+
+.region-tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.markets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 1rem;
+}
+
+.market-card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    backdrop-filter: blur(8px);
+    transition: border-color var(--transition), transform var(--transition);
+}
+
+.market-card:hover {
+    border-color: var(--border-active);
+    transform: translateY(-2px);
+}
+
+.market-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.market-card-country {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+.market-card-currency {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-sm);
+}
+
+.market-exchanges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
+}
+
+.exchange-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: var(--accent-muted);
+    border: 1px solid var(--border-active);
+    border-radius: var(--radius-sm);
+    padding: 0.2rem 0.55rem;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.exchange-badge .exchange-suffix {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.market-tickers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.ticker-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition: all var(--transition);
+    font-size: 0.75rem;
+}
+
+.ticker-chip:hover {
+    background: var(--accent-muted);
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+
+.ticker-chip-symbol {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--accent);
+    font-size: 0.75rem;
+}
+
+.ticker-chip-name {
+    color: var(--text-muted);
+    font-size: 0.65rem;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ---- Footer ---- */

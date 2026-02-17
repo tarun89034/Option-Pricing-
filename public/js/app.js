@@ -329,6 +329,118 @@
         });
     }
 
+    // ---- Global Markets Explorer ----
+    function initMarkets() {
+        const regionTabs = Utils.el('region-tabs');
+        const content = Utils.el('markets-content');
+        const regions = Object.keys(GLOBAL_MARKETS);
+
+        // Create region tabs
+        regions.forEach((region, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'region-tab' + (i === 0 ? ' active' : '');
+            btn.textContent = region;
+            btn.addEventListener('click', () => {
+                Utils.qsa('.region-tab').forEach(t => t.classList.remove('active'));
+                btn.classList.add('active');
+                renderRegion(region);
+            });
+            regionTabs.appendChild(btn);
+        });
+
+        // Also add an "All" tab
+        const allBtn = document.createElement('button');
+        allBtn.className = 'region-tab';
+        allBtn.textContent = 'All Regions';
+        allBtn.addEventListener('click', () => {
+            Utils.qsa('.region-tab').forEach(t => t.classList.remove('active'));
+            allBtn.classList.add('active');
+            renderAllRegions();
+        });
+        regionTabs.insertBefore(allBtn, regionTabs.firstChild);
+
+        // Render first region
+        renderRegion(regions[0]);
+    }
+
+    function renderRegion(region) {
+        const content = Utils.el('markets-content');
+        content.innerHTML = '';
+        const countries = GLOBAL_MARKETS[region];
+        Object.entries(countries).forEach(([country, data]) => {
+            content.appendChild(createCountryCard(country, data));
+        });
+    }
+
+    function renderAllRegions() {
+        const content = Utils.el('markets-content');
+        content.innerHTML = '';
+        Object.values(GLOBAL_MARKETS).forEach(countries => {
+            Object.entries(countries).forEach(([country, data]) => {
+                content.appendChild(createCountryCard(country, data));
+            });
+        });
+    }
+
+    function createCountryCard(country, data) {
+        const card = document.createElement('div');
+        card.className = 'market-card';
+
+        // Header
+        const header = document.createElement('div');
+        header.className = 'market-card-header';
+        header.innerHTML = `
+            <span class="market-card-country">${country}</span>
+            <span class="market-card-currency">${data.currency}</span>
+        `;
+        card.appendChild(header);
+
+        // Exchanges
+        const exchanges = document.createElement('div');
+        exchanges.className = 'market-exchanges';
+        data.exchanges.forEach(ex => {
+            const badge = document.createElement('span');
+            badge.className = 'exchange-badge';
+            badge.innerHTML = ex.name + (ex.suffix ? ' <span class="exchange-suffix">' + ex.suffix + '</span>' : '');
+            badge.title = ex.desc;
+            exchanges.appendChild(badge);
+        });
+        card.appendChild(exchanges);
+
+        // Tickers
+        const tickers = document.createElement('div');
+        tickers.className = 'market-tickers';
+        data.tickers.forEach(t => {
+            const chip = document.createElement('div');
+            chip.className = 'ticker-chip';
+            chip.innerHTML = `
+                <span class="ticker-chip-symbol">${t.symbol}</span>
+                <span class="ticker-chip-name">${t.name}</span>
+            `;
+            chip.title = 'Load ' + t.symbol + ' into Pricing Calculator';
+            chip.addEventListener('click', () => loadTickerIntoPricer(t.symbol));
+            tickers.appendChild(chip);
+        });
+        card.appendChild(tickers);
+
+        return card;
+    }
+
+    function loadTickerIntoPricer(symbol) {
+        Utils.el('ticker').value = symbol;
+        // Switch to pricing view
+        navButtons.forEach(b => b.classList.remove('active'));
+        views.forEach(v => v.classList.remove('active'));
+        Utils.qs('[data-view="pricing"]').classList.add('active');
+        Utils.el('view-pricing').classList.add('active');
+        Utils.el('ticker').focus();
+    }
+
+    // Initialize markets on load
+    if (typeof GLOBAL_MARKETS !== 'undefined') {
+        initMarkets();
+    }
+
     // ---- Table Sorting ----
     document.addEventListener('click', (e) => {
         const th = e.target.closest('th[data-sort]');

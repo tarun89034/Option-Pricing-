@@ -26,12 +26,17 @@ A professional web application for pricing financial options using three quantit
 - Sortable columns
 - Auto-loading expiry dates on ticker input
 
-### Global Market Support
-All exchanges covered by Yahoo Finance are supported:
-- US: `AAPL`, `MSFT`, `SPY`
-- Europe: `VOD.L` (London), `SAP.DE` (Frankfurt)
-- Asia: `7203.T` (Tokyo), `005930.KS` (Seoul)
-- And more
+### Global Markets Explorer
+Built-in interactive explorer covering **30+ countries** across 6 regions with click-to-load ticker selection:
+
+| Region | Countries |
+|--------|----------|
+| **North America** | United States (NYSE, NASDAQ), Canada (TSX), Mexico (BMV) |
+| **South America** | Brazil (B3), Argentina (BCBA), Chile (BCS), Colombia (BVC) |
+| **Europe** | UK (LSE), Germany (XETRA), France (Euronext Paris), Switzerland (SIX), Netherlands, Spain, Italy, Sweden, Norway |
+| **Asia** | India (NSE, BSE), Japan (TSE), China (SSE, SZSE, HKEX), South Korea (KRX), Taiwan (TWSE), Singapore (SGX), Thailand, Malaysia, Indonesia, Philippines, Vietnam, Israel, Saudi Arabia |
+| **Africa** | South Africa (JSE), Nigeria (NGX), Egypt (EGX), Kenya (NSE), Morocco (Casablanca SE) |
+| **Oceania** | Australia (ASX), New Zealand (NZX) |
 
 ---
 
@@ -50,6 +55,7 @@ Option pricing/
 |   |-- css/styles.css           # Dark minimalistic design system
 |   |-- js/app.js                # Application controller
 |   |-- js/api.js                # API communication layer
+|   |-- js/markets.js            # Global markets data (30+ countries)
 |   |-- js/charts.js             # Chart.js visualizations
 |   |-- js/utils.js              # Formatting utilities
 |
