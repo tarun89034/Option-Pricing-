@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Professional option pricing calculator and historical data dashboard. Supports Black-Scholes, Monte Carlo, and Binomial Tree models for European, American, Asian, Lookback, and Barrier options.">
+    <title>Option Pricing -- Quantitative Analysis Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-brand">
+            <h1>Option Pricing</h1>
+            <span class="header-subtitle">Quantitative Analysis Platform</span>
+        </div>
+        <nav class="header-nav" id="main-nav">
+            <button class="nav-btn active" data-view="pricing">Pricing Calculator</button>
+            <button class="nav-btn" data-view="dashboard">Historical Dashboard</button>
+            <button class="nav-btn" data-view="chain">Options Chain</button>
+        </nav>
+    </header>
+
+    <main class="main-content">
+        <!-- Pricing Calculator View -->
+        <section class="view active" id="view-pricing">
+            <div class="pricing-layout">
+                <div class="panel input-panel">
+                    <h2 class="panel-title">Parameters</h2>
+                    <form id="pricing-form" class="pricing-form">
+                        <div class="form-group">
+                            <label for="ticker">Ticker Symbol</label>
+                            <input type="text" id="ticker" name="ticker" placeholder="e.g. AAPL, MSFT, 7203.T" required>
+                            <span class="form-hint">Supports all major global exchanges</span>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="option_type">Option Type</label>
+                                <select id="option_type" name="option_type">
+                                    <option value="call">Call</option>
+                                    <option value="put">Put</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="days_to_expiry">Days to Expiry</label>
+                                <input type="number" id="days_to_expiry" name="days_to_expiry" placeholder="30" min="1" max="1095" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="strike">Strike Price</label>
+                            <input type="number" id="strike" name="strike" placeholder="Leave blank for ATM" step="0.01" min="0.01">
+                            <span class="form-hint">Optional -- defaults to At-The-Money (current price)</span>
+                        </div>
+                        <button type="submit" class="btn-primary" id="btn-price">
+                            <span class="btn-text">Calculate Prices</span>
+                            <span class="btn-loader" style="display:none;"></span>
+                        </button>
+                    </form>
+                </div>
+
+                <div class="panel results-panel" id="results-panel" style="display:none;">
+                    <h2 class="panel-title">Market Data</h2>
+                    <div id="market-data-summary" class="data-grid"></div>
+
+                    <h2 class="panel-title" style="margin-top:1.5rem;">Pricing Results</h2>
+                    <div class="table-container">
+                        <table class="data-table" id="pricing-table">
+                            <thead>
+                                <tr>
+                                    <th>Model</th>
+                                    <th>Style</th>
+                                    <th>Price</th>
+                                    <th>Std Error</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pricing-tbody"></tbody>
+                        </table>
+                    </div>
+
+                    <h2 class="panel-title" style="margin-top:1.5rem;">Greeks Comparison</h2>
+                    <div class="table-container">
+                        <table class="data-table" id="greeks-table">
+                            <thead>
+                                <tr>
+                                    <th>Greek</th>
+                                    <th>Black-Scholes</th>
+                                    <th>Binomial (American)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="greeks-tbody"></tbody>
+                        </table>
+                    </div>
+
+                    <h2 class="panel-title" style="margin-top:1.5rem;">Model Convergence</h2>
+                    <div id="convergence-summary" class="data-grid"></div>
+
+                    <h2 class="panel-title" style="margin-top:1.5rem;">Model Comparison</h2>
+                    <div class="chart-container">
+                        <canvas id="model-comparison-chart"></canvas>
+                    </div>
+
+                    <h2 class="panel-title" style="margin-top:1.5rem;">Greeks Profile</h2>
+                    <div class="chart-container">
+                        <canvas id="greeks-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="panel error-panel" id="pricing-error" style="display:none;">
+                <p id="pricing-error-msg"></p>
+            </div>
+        </section>
+
+        <!-- Historical Dashboard View -->
+        <section class="view" id="view-dashboard">
+            <div class="panel input-panel">
+                <h2 class="panel-title">Historical Data</h2>
+                <form id="dashboard-form" class="pricing-form inline-form">
+                    <div class="form-group">
+                        <label for="dash-ticker">Ticker Symbol</label>
+                        <input type="text" id="dash-ticker" placeholder="e.g. AAPL" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="dash-period">Period</label>
+                        <select id="dash-period">
+                            <option value="1mo">1 Month</option>
+                            <option value="3mo">3 Months</option>
+                            <option value="6mo">6 Months</option>
+                            <option value="1y" selected>1 Year</option>
+                            <option value="2y">2 Years</option>
+                            <option value="5y">5 Years</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-primary" id="btn-dashboard">
+                        <span class="btn-text">Load Data</span>
+                        <span class="btn-loader" style="display:none;"></span>
+                    </button>
+                </form>
+            </div>
+
+            <div id="dashboard-results" style="display:none;">
+                <div class="panel">
+                    <h2 class="panel-title" id="dash-stock-title">Stock Information</h2>
+                    <div id="dash-stock-info" class="data-grid"></div>
+                </div>
+
+                <div class="panel">
+                    <h2 class="panel-title">Price History</h2>
+                    <div class="chart-container chart-large">
+                        <canvas id="price-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h2 class="panel-title">Volume</h2>
+                    <div class="chart-container">
+                        <canvas id="volume-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h2 class="panel-title">Historical Data Table</h2>
+                    <div class="table-container table-scrollable">
+                        <table class="data-table sortable" id="historical-table">
+                            <thead>
+                                <tr>
+                                    <th data-sort="date">Date</th>
+                                    <th data-sort="open">Open</th>
+                                    <th data-sort="high">High</th>
+                                    <th data-sort="low">Low</th>
+                                    <th data-sort="close">Close</th>
+                                    <th data-sort="volume">Volume</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historical-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="panel error-panel" id="dashboard-error" style="display:none;">
+                <p id="dashboard-error-msg"></p>
+            </div>
+        </section>
+
+        <!-- Options Chain View -->
+        <section class="view" id="view-chain">
+            <div class="panel input-panel">
+                <h2 class="panel-title">Options Chain</h2>
+                <form id="chain-form" class="pricing-form inline-form">
+                    <div class="form-group">
+                        <label for="chain-ticker">Ticker Symbol</label>
+                        <input type="text" id="chain-ticker" placeholder="e.g. AAPL" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="chain-expiry">Expiry Date</label>
+                        <select id="chain-expiry">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn-primary" id="btn-chain">
+                        <span class="btn-text">Load Chain</span>
+                        <span class="btn-loader" style="display:none;"></span>
+                    </button>
+                </form>
+            </div>
+
+            <div id="chain-results" style="display:none;">
+                <div class="panel">
+                    <div class="chain-header">
+                        <h2 class="panel-title" id="chain-title">Options Chain</h2>
+                        <div class="chain-spot" id="chain-spot-price"></div>
+                    </div>
+                    <div class="chain-tabs">
+                        <button class="chain-tab active" data-chain="calls">Calls</button>
+                        <button class="chain-tab" data-chain="puts">Puts</button>
+                    </div>
+                    <div class="table-container table-scrollable">
+                        <table class="data-table sortable" id="chain-table">
+                            <thead>
+                                <tr>
+                                    <th data-sort="strike">Strike</th>
+                                    <th data-sort="lastPrice">Last</th>
+                                    <th data-sort="bid">Bid</th>
+                                    <th data-sort="ask">Ask</th>
+                                    <th data-sort="volume">Volume</th>
+                                    <th data-sort="openInterest">Open Int.</th>
+                                    <th data-sort="impliedVolatility">IV</th>
+                                    <th>ITM</th>
+                                </tr>
+                            </thead>
+                            <tbody id="chain-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="panel error-panel" id="chain-error" style="display:none;">
+                <p id="chain-error-msg"></p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>Data provided by Yahoo Finance via yfinance. All data is real-time or delayed per exchange rules. For informational purposes only.</p>
+    </footer>
+
+    <script src="js/utils.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
