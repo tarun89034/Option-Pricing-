@@ -9,6 +9,18 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+# yfinance reports `info["dividendYield"]` as a PERCENTAGE number -- 0.53 means
+# 0.53%, not 53%. Every model in lib/pricing_models.py expects the continuous
+# dividend yield `q` as a decimal FRACTION (0.0053). Passing the raw value
+# straight through makes q 100x too large and corrupts every price and Greek.
+DIVIDEND_YIELD_SCALE = 100.0
+
+# Sanity ceiling for a continuous dividend yield, expressed as a fraction.
+# Real-world yields top out near 20% even for high-payout REITs, so anything
+# past 100% is bad upstream data (or another units change in yfinance) and is
+# discarded rather than fed into the pricing models.
+MAX_PLAUSIBLE_DIVIDEND_YIELD = 1.0
+
 
 def validate_ticker(ticker):
     """Validate a ticker symbol by attempting to fetch recent data."""
@@ -64,13 +76,21 @@ class MarketDataFetcher:
 
     @property
     def dividend_yield(self):
+        """Continuous dividend yield as a decimal fraction (0.0053 == 0.53%)."""
         if self._dividend_yield is None:
-            try:
-                info = self._get_info()
-                self._dividend_yield = float(info.get("dividendYield", 0) or 0)
-            except Exception:
-                self._dividend_yield = 0.0
+            self._dividend_yield = self._fetch_dividend_yield()
         return self._dividend_yield
+
+    def _fetch_dividend_yield(self):
+        try:
+            info = self._get_info()
+            raw = info.get("dividendYield", 0) or 0
+            q = float(raw) / DIVIDEND_YIELD_SCALE
+        except Exception:
+            return 0.0
+        if not np.isfinite(q) or q < 0 or q > MAX_PLAUSIBLE_DIVIDEND_YIELD:
+            return 0.0
+        return q
 
     def get_risk_free_rate(self):
         """Fetch risk-free rate from 13-week Treasury Bill."""

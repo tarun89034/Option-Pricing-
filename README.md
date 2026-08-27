@@ -21,7 +21,7 @@ A professional web application for pricing financial options using three quantit
 
 ### Options Chain
 - Real-time options chain from Yahoo Finance
-- **50x Faster Loading** -- Optimised to fetch expiry dates instantly
+- **Deferred Chain Loading** -- `only_expiries=true` returns just the expiry dates, so the full calls/puts chain is downloaded only for the expiry you select
 - Calls and puts with bid/ask, volume, open interest, and implied volatility
 - In-the-money highlighting
 - Sortable columns
@@ -123,6 +123,17 @@ python server.py
 ```
 
 Open [http://localhost:5000](http://localhost:5000) in your browser.
+
+### Tests
+
+```bash
+python -m unittest discover -s tests
+```
+
+The suite is offline -- it builds models from literal parameters and never
+touches the network. It covers put-call parity, the American >= European
+inequality, the zero-dividend early-exercise premium (Merton), dividend-yield
+unit normalisation, and the binomial no-arbitrage guard.
 
 ---
 

@@ -1,7 +1,6 @@
 import os
 import sys
 import json
-import traceback
 from flask import Flask, request, jsonify
 
 # Add project root to sys.path so lib/ can be imported
@@ -10,6 +9,18 @@ if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
 app = Flask(__name__)
+
+
+def log_and_fail(message, exc):
+    """
+    Record the failure in the server log and return a client-safe JSON body.
+
+    A formatted traceback exposes file system paths, dependency versions and
+    internal call structure, so it stays in the logs and never reaches the
+    client.
+    """
+    app.logger.exception(message)
+    return jsonify({"error": str(exc)}), 500
 
 # Manual CORS handling
 @app.after_request
@@ -45,9 +56,9 @@ def health():
         diagnostics["status"] = "ok"
         return jsonify(diagnostics)
     except Exception as e:
+        app.logger.exception("Health check import diagnostics failed")
         diagnostics["status"] = "error"
         diagnostics["error"] = str(e)
-        diagnostics["traceback"] = traceback.format_exc()
         return jsonify(diagnostics), 500
 
 
@@ -68,7 +79,7 @@ def market_data():
             "historical_data": fetcher.get_historical_data(period=period)
         })
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+        return log_and_fail("market_data failed", e)
 
 
 @app.route('/api/price_option', methods=['GET', 'OPTIONS'])
@@ -153,7 +164,7 @@ def price_option():
             "convergence": convergence,
         })
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+        return log_and_fail("price_option failed", e)
 
 
 @app.route('/api/options_chain', methods=['GET', 'OPTIONS'])
@@ -171,7 +182,7 @@ def options_chain():
             return jsonify({"expiries": fetcher.get_options_expiries()})
         return jsonify(fetcher.get_options_chain(expiry=request.args.get("expiry")))
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+        return log_and_fail("options_chain failed", e)
 
 
 @app.route('/api/exchange_rate', methods=['GET', 'OPTIONS'])
@@ -191,4 +202,4 @@ def exchange_rate():
         rate = float(h["Close"].iloc[-1]) if not h.empty else 1.0
         return jsonify({"source": source, "target": target, "rate": rate})
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+        return log_and_fail("exchange_rate failed", e)

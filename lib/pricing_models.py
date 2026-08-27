@@ -293,10 +293,45 @@ class BinomialModel:
         self.q = q
         self.n_steps = n_steps
         self.dt = self.T / n_steps
-        self.u = np.exp(sigma * np.sqrt(self.dt))
+        # Use the sanitised self.sigma, not the raw argument: a zero or negative
+        # sigma would otherwise collapse u onto d and make p unbounded.
+        self.u = np.exp(self.sigma * np.sqrt(self.dt))
         self.d = 1 / self.u
-        self.p = (np.exp((r - q) * self.dt) - self.d) / (self.u - self.d)
-        self.discount = np.exp(-r * self.dt)
+        self.p = self._risk_neutral_probability()
+        self.discount = np.exp(-self.r * self.dt)
+
+    def _risk_neutral_probability(self):
+        """
+        Risk-neutral up-probability for the CRR lattice.
+
+        The tree is arbitrage-free only while d < exp((r - q) * dt) < u, which is
+        exactly the condition p in (0, 1). Outside that band the backward
+        induction weights p and 1 - p alternate in sign and compound over every
+        step, so the model returns a wildly wrong price instead of failing.
+        Reject those parameters up front.
+        """
+        growth = np.exp((self.r - self.q) * self.dt)
+        denominator = self.u - self.d
+        p = (growth - self.d) / denominator if denominator != 0 else np.nan
+
+        if np.isfinite(p) and 0 < p < 1:
+            return float(p)
+
+        drift = self.r - self.q
+        if drift != 0:
+            min_steps = int(np.ceil(self.T * (drift / self.sigma) ** 2)) + 1
+            hint = f"retry with n_steps > {min_steps}"
+        else:
+            hint = "check that sigma is a positive decimal fraction"
+        raise ValueError(
+            "Binomial tree parameters violate the no-arbitrage condition "
+            "d < exp((r - q) * dt) < u: risk-neutral probability p = "
+            f"{p:.6g} must be strictly between 0 and 1. Got r={self.r:.6g}, "
+            f"q={self.q:.6g}, sigma={self.sigma:.6g}, T={self.T:.6g}, "
+            f"n_steps={self.n_steps}; the drift dominates the volatility over "
+            f"a single step. Either {hint}, or verify that the rate and "
+            "dividend yield are decimal fractions rather than percentages."
+        )
 
     def _build_terminal_stock_prices(self):
         n = self.n_steps
@@ -374,7 +409,11 @@ class BinomialModel:
             theta = price_func(model_theta) - base_price
         else:
             theta = 0
-        d_sigma = 0.01
+        # p in (0, 1) requires sigma > |r - q| * sqrt(dt). Keep the volatility
+        # bump strictly inside that range so a low-vol input cannot make the
+        # guard in __init__ fire on a lattice this method builds for itself.
+        min_sigma = abs(self.r - self.q) * np.sqrt(self.dt)
+        d_sigma = min(0.01, 0.5 * max(self.sigma - min_sigma, 0.0))
         model_vega_up = BinomialModel(
             self.S,
             self.K,
@@ -393,7 +432,10 @@ class BinomialModel:
             self.q,
             self.n_steps,
         )
-        vega = (price_func(model_vega_up) - price_func(model_vega_down)) / 2
+        # Scaled to a 1 percentage-point move in sigma, independent of the bump.
+        vega = (price_func(model_vega_up) - price_func(model_vega_down)) / (
+            200 * d_sigma
+        )
         return {
             "delta": float(delta),
             "gamma": float(gamma),
